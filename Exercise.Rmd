@@ -1,0 +1,397 @@
+---
+title: "R_project"
+author: "Richard Barad"
+date: "2025-04-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(plyr)
+library(tidycensus)
+library(tidyverse)
+library(httr2)
+library(tigris)
+library(sf)
+library(readxl)
+library(janitor)
+```
+
+# R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load_variables}
+
+vars_acs <- load_variables("acs5",year=2023)
+
+```
+
+# Process Regional Summaries from AHS Dataset
+
+``` {r regional_ahs_data}
+
+AHS_data <- read_excel('Data/AHS/AHS_MetroArea_Data.xlsx',sheet='AHS')
+
+```
+
+# Create Table of Metro Areas
+
+```{r metro_table}
+
+NYC_Counties_NYC <- cbind(County=c('New York','Bronx','Queens','Kings','Richmond'),State='New York',Central='Central')
+NYC_Counties_NY <- cbind(County=c('Nassau','Suffolk','Putnam','Westchester','Rockland'),State='New York',Central='Not Central')
+NYC_Counties_NJ <- cbind(County=c('Sussex','Passaic','Bergen','Essex','Union','Morris','Hunterdon','Somerset',
+                                  'Middlesex','Monmouth','Ocean','Hudson'),State='New Jersey',Central='Not Central')
+
+NYC_Counties <- data.frame(rbind(NYC_Counties_NJ,NYC_Counties_NYC,NYC_Counties_NY),Metro='New York City')
+rm(NYC_Counties_NYC,NYC_Counties_NY,NYC_Counties_NJ)
+
+LA_Counties <- data.frame(County=c('Los Angeles','Orange'),State='California',Central=c('Central','Not Central'),Metro='Los Angeles')
+
+Chicago_Counties_WI <- cbind(County='Kenosha',State='Wisconsin',Central='Not Central')
+Chicago_Counties_IL <- cbind(County=c('Lake','Cook','DuPage','Will','Grundy','Kendall',
+                                      'Kane','McHenry','DeKalb'),State='Illinois',Central='Not Central')
+
+Chicago_Counties_IL2 <- cbind(County='Cook',State='Illinois',Central='Central')
+Chicago_Counties_IN <- cbind(County=c('Jasper','Lake','Newton','Porter'),State='Indiana',Central='Not Central')
+
+Chicago_Counties <- data.frame(rbind(Chicago_Counties_WI,Chicago_Counties_IL,Chicago_Counties_IN,Chicago_Counties_IL2),Metro='Chicago')
+
+rm(Chicago_Counties_WI,Chicago_Counties_IL,Chicago_Counties_IL2,Chicago_Counties_IN,Chicago_Counties_WI)
+
+Dallas_Counties1 <- cbind(County=c('Collin','Denton','Ellis','Hunt','Kaufman','Rockwall',
+                                   'Johnson','Parker','Wise'),State='Texas',Central='Not Central',Metro='Dallas')
+
+Dallas_Counties2 <- cbind(County=c('Dallas','Tarrant'),State='Texas',Central='Central',Metro='Dallas')
+
+Dallas_Counties <- data.frame(rbind(Dallas_Counties1,Dallas_Counties2))
+
+rm(Dallas_Counties1,Dallas_Counties2)
+Houston_Counties1 <- cbind(County=c('Austin','Brazoria','Chambers',
+                                    'Fort Bend','Galveston','Liberty','Montgomery','Waller'),
+                           State='Texas',Metro='Houston',Central='Not Central')
+
+Houston_Counties2 <- cbind(County='Harris',State='Texas',Metro='Houston',Central='Central')
+
+
+Houston_Counties <- data.frame(rbind(Houston_Counties1,Houston_Counties2))
+
+rm(Houston_Counties1,Houston_Counties2)
+
+Philadelphia_Counties_NJ <- cbind(County=c('Burlington','Camden','Gloucester','Salem'),State='New Jersey',Central='Not Central')
+Philadelphia_Counties_PA1 <- cbind(County=c('Bucks','Chester','Delaware','Montgomery'),State='Pennsylvania',Central='Not Central')
+Philadelphia_Counties_PA <- cbind(County='Philadelphia',State='Pennsylvania',Central='Not Central')
+Philadelphia_Counties_DE_MD <- cbind(County=c('New Castle','Cecil'),State=c('Delaware','Maryland'),Central='Not Central')
+
+Philadelphia_Counties <- data.frame(rbind(Philadelphia_Counties_NJ,Philadelphia_Counties_PA,Philadelphia_Counties_PA1,Philadelphia_Counties_DE_MD),
+                                    Metro='Philadelphia')
+
+rm(Philadelphia_Counties_NJ,Philadelphia_Counties_PA,Philadelphia_Counties_PA1,Philadelphia_Counties_DE_MD)
+
+WashingtonDC_Count <- cbind(County='District of Columbia',State='District of Columbia',Central='Central')
+Virginia_Counties <- cbind(County=c('Fairfax','Prince William','Manassas','Stafford','Fredericksburg','Spotsylvania','Fauquier','Warren','Clarke','Jefferson','Loudoun','Fairfax City','Falls Church','Arlington'),State='Virginia',Central='Not Central')
+Maryland_Counties <- cbind(County=c('Frederick','Montgomery','Prince George\'s','Calvert','Charles'),State='Maryland',Central='Not Central')
+
+WashingtonDC_Counties <- data.frame(rbind(WashingtonDC_Count,Virginia_Counties,Maryland_Counties),Metro='Washington DC')
+rm(WashingtonDC_Count,Virginia_Counties,Maryland_Counties)
+
+
+Miami_Counties1 <- cbind(County='Miami-Dade',State='Florida',Central='Central')
+Miami_Counties2 <- cbind(County=c('Broward','Palm Beach'),State='Florida',Central='Central')
+
+Miami_Counties <- data.frame(rbind(Miami_Counties1,Miami_Counties2),Metro='Miami')
+
+rm(Miami_Counties1,Miami_Counties2)
+
+Atlanta_Counties1 <- cbind(County='Fulton',State='Georgia',Central='Central')
+Atlanta_Counties2 <- cbind(County=c('Barrow','Butts','Carroll','Clayton','Coweta','Dawson','DeKalb',
+                                  'Douglas','Fayette','Forsyth','Gwinnett','Heard','Henry','Jasper',
+                                  'Lumpkin','Meriwether','Morgan','Newton','Pickens','Pike','Rockdale',
+                                  'Spalding','Walton'),State='Georgia',Central='Not Central')
+
+Atlanta_Counties <- data.frame(rbind(Atlanta_Counties1,Atlanta_Counties2),Metro='Atlanta')
+
+rm(Atlanta_Counties1,Atlanta_Counties2)
+
+Boston_Counties1 <- cbind(County=c('Middlesex','Norfolk','Plymouth','Suffolk',
+                                   'Rockingham','Strafford'),State='Massachusetts',Central='Not Central')
+Boston_Counties2 <- cbind(County='Essex',State='Massachusetts',Central='Central')
+Boston_Counties3 <- cbind(County=c('Rockingham','Strafford'),State='New Hampshire',Central='Not Central')
+Boston_Counties <- data.frame(rbind(Boston_Counties1,Boston_Counties2,Boston_Counties3),Metro='Boston')
+
+rm(Boston_Counties1,Boston_Counties2,Boston_Counties3)
+
+SanFrancisco1 <- cbind(County='San Francisco',State='California',Central='Central')
+SanFrancisco2 <- cbind(County=c('San Mateo','Santa Clara','Alameda','Contra Costa','Solano','Napa','Sonoma','Marin'),State='California',Central='Central')
+SanFrancisco_Counties <- data.frame(cbind(rbind(SanFrancisco1,SanFrancisco2),Metro='San Francisco'))
+
+rm(SanFrancisco1,SanFrancisco2)
+
+#Might Use Combined Also for Riverside
+Phoenix_Counties <- data.frame(County=c('Maricopa','Pinal'),State='Arizona',Central=c('Central','Not Central'),Metro='Phoenix')
+
+Detroit1 <- cbind(County='Wayne',State='Michigan',Central='Central')
+Detroit2 <- cbind(County=c('Oakland','Macomb','Livingston','St. Clair','Lapeer'),Central='Not Central',State='Michigan')
+Detroit_Counties <- data.frame(rbind(Detroit1,Detroit2),Metro='Detroit')
+
+rm(Detroit1,Detroit2)
+
+Seattle1 <- cbind(County=c('King'),State='Washington',Central='Central')
+Seattle2 <- cbind(County=c('Snohomish','Pierce'),State='Washington',Central='Not Central')
+Seattle_Counties <- data.frame(rbind(Seattle1,Seattle2),Metro='Seattle')
+
+rm(Seattle1,Seattle2)
+
+Counties_df <- rbind(NYC_Counties,Seattle_Counties,Detroit_Counties,Phoenix_Counties,SanFrancisco_Counties,Boston_Counties,
+                     Atlanta_Counties,Miami_Counties,WashingtonDC_Counties,Philadelphia_Counties,Houston_Counties,
+                     Dallas_Counties,LA_Counties)
+
+rm(NYC_Counties,Seattle_Counties,Detroit_Counties,Phoenix_Counties,SanFrancisco_Counties,Boston_Counties,
+                     Atlanta_Counties,Miami_Counties,WashingtonDC_Counties,Philadelphia_Counties,Houston_Counties,
+                     Dallas_Counties,LA_Counties)
+
+```
+
+# Get ACS Data for Residential Units by County and Urban Areas
+
+```{r get_census_data, echo=FALSE}
+
+vars <- c('B25024_002','B25024_003','B25024_004','B25024_005','B25024_006','B25024_007','B25024_008','B25024_009','B25024_010')
+
+residential <- get_acs('county',variables=vars,year=2021,output='wide',geometry=TRUE) %>%
+  dplyr::select('GEOID','NAME',ends_with('E')) %>%
+  dplyr::rename('Single_detached'='B25024_002E',
+         'Single_attached'='B25024_003E',
+         'Apartment2'='B25024_004E',
+         'Apartment34'='B25024_005E',
+         'Apartment59'='B25024_006E',
+         'Apartment1019'='B25024_007E',
+         'Apartment2049'='B25024_008E',
+         'Apartment50plus'='B25024_009E',
+         'Mobile_home'='B25024_010E') %>%
+  mutate(Apartment24 = Apartment2 + Apartment34) %>%
+  select(-'Apartment2',-'Apartment34') %>%
+  separate(NAME, into = c('County', 'State'), sep = ", ") %>%
+  filter(State != 'Puerto Rico')
+
+residential <- residential %>%
+  mutate(County = str_replace(residential$County," County","")) %>%
+  select('GEOID','County','State','Single_detached','Single_attached','Apartment24',
+         'Apartment59','Apartment1019','Apartment2049','Apartment50plus','Mobile_home')
+
+residential_long_no_geom <- residential %>%
+  st_drop_geometry() %>%
+  pivot_longer(cols=c('Single_detached','Single_attached','Apartment24','Apartment59',
+                      'Apartment1019','Apartment2049','Apartment50plus','Mobile_home'),names_to='Category')
+
+```
+``` {r get_urban}
+
+base_url <- 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_2020_DHC_Total_Population/FeatureServer/2/query'
+
+base_url <- url_parse(base_url)
+
+base_url$query = list(where = '1=1',
+                      f = "json",
+                      OutFields = "GEOID,COUNTYNS,P002_calc_pct0002,P002_calc_pct0003",
+                      returnGeometry = "false")
+
+final_url <- url_build(base_url)
+
+urban <- st_read(final_url) %>%
+  st_drop_geometry()
+
+```
+
+# Cost per sq foot table
+
+``` {r build_cost_table}
+
+build_cost <- read_csv('Data/Build_cost_Data.csv') %>%
+  separate_wider_delim(cols=Range,delim=":",names=c('State','Range')) %>%
+  separate_wider_delim(cols=Range,delim="–",names=c('Rural','Urban')) %>%
+  mutate(Urban = as.numeric(str_remove_all(Urban, "\\$")),
+         Rural = as.numeric(str_remove_all(Rural, "\\$")),
+         Mixed = (Urban + Rural) / 2) %>%
+  pivot_longer(cols=c(Urban,Rural,Mixed),names_to='Urban_Rural',values_to='price_per_sq_ft_single') %>%
+  mutate(percent =  (price_per_sq_ft_single - min(price_per_sq_ft_single)) / (max(price_per_sq_ft_single) - min(price_per_sq_ft_single)),
+         price_per_sq_ft_Apartment_high = round(235 + (450-235) * percent),
+         price_per_sq_ft_Apartment_medium = round(185 + (270-185) * percent),
+         price_per_sq_ft_Apartment_low = round(150 + (240-150) * percent),
+         hotel = round(341 + (604-341) * percent),
+         warehouse = round(214 + (238-214) * percent),
+         mid_rise_office = round(454 + (719-454) * percent),
+         retail = round(430 + (430-284) * percent),
+         single_office = round(237 + (378-237) * percent),
+         strip_mall = round(575 + (575-366) * percent),
+         supermarket = round(284 + (430-284) * percent),
+         specialty = round(237 + (378-237) * percent),
+         industrial = round(214 + (238-214) * percent),
+         school = round(217 + (417-217) * percent),
+         sports_entertainment = round(454 + (719-454) * percent),
+         hospital = round(454 + (719-454) * percent),
+         parking_garage = round(70 + (143-70) * percent),
+         high_rise_office = round(545 + (827-545) * percent)) %>%
+  select(-percent)
+
+```
+# Create table for Mean Units in Buildings
+
+``` {r means_table}
+
+Category = c('Single_detached','Single_attached','Apartment24',
+         'Apartment59','Apartment1019','Apartment2049','Apartment50plus','Mobile_home')
+
+mean_units = c(1,1,3,7,15,30,150,1)
+
+mean_units_table = data.frame(Category,mean_units)
+
+```
+
+# Merge together all information into one table
+
+``` {r merge_tables, warning=FALSE}
+
+residential_long_no_geom2 <- residential_long_no_geom %>%
+  left_join(., urban, by = 'GEOID') %>%
+  dplyr::rename(pct_urban = P002_calc_pct0002,
+                pct_rural = P002_calc_pct0003) %>%
+  left_join(., Counties_df, by = c('County', 'State')) %>%
+  mutate(
+    Urban_Rural = case_when(pct_urban >= 75 ~ 'Urban',
+                          pct_urban < 25 ~ 'Rural',
+                          TRUE ~ 'Mixed'),   # All others
+    Metro = ifelse(is.na(Metro), Urban_Rural, Metro)) %>%
+  left_join(AHS_data, by = c('Central', 'Category', 'Metro')) %>%
+  left_join(build_cost %>% select(starts_with('price'),State,Urban_Rural), by = c('Urban_Rural', 'State')) %>%
+  left_join(mean_units_table, by = 'Category') %>%
+  mutate(per_sq_ft = case_when(mean_units == 1 ~ price_per_sq_ft_single,
+                               mean_units > 1 & mean_units <= 15 ~ price_per_sq_ft_Apartment_low,
+                               mean_units == 30 ~ price_per_sq_ft_Apartment_medium,
+                               mean_units >30  ~ price_per_sq_ft_Apartment_high)) %>%
+  select(-pct_rural,-pct_urban,-Note,-price_per_sq_ft_single,-price_per_sq_ft_Apartment_low,-price_per_sq_ft_Apartment_medium,-price_per_sq_ft_Apartment_high) %>%
+  mutate(cost = value * mean_units * Mean_Area * per_sq_ft,
+         cost = ifelse(mean_units > 15, cost * 1.15, cost))
+
+county_summary <- residential_long_no_geom2 %>%
+  group_by(GEOID) %>%
+  dplyr::summarise(total = sum(cost)) %>%
+  ungroup() %>%
+  left_join(residential,by='GEOID') %>%
+  st_as_sf()
+
+
+st_write(county_summary,'county_summary.shp',append=FALSE)
+```
+
+``` {r procees_building_data}
+
+files = list.files('Data/Commericial_Building_Inventroy',"*.xlsx")
+
+c_buildings <- list() 
+
+for (i in seq_along(files)) {
+  f <- files[i]
+  path <- file.path("Data", "Commericial_Building_Inventroy", f)
+  temp <- read_excel(path, sheet = 'County') %>%
+    select(-"...22") %>%
+    remove_empty("cols") %>%
+    mutate(area_total = bldg_count * rentablebuildingarea_mean) %>%
+    filter(reported_propertytype != 'Multi-Family') %>%
+    filter(doe_prototype != 'apartment') %>%
+    filter(reported_propertysubtype != 'Residential Income') %>%
+    filter(reported_propertysubtype != 'Parking Lot') %>%
+    filter(reported_propertysubtype != 'Trailer / Camper Park') %>%
+    mutate(doe_prototype = ifelse(doe_prototype == 'outpatient','office', doe_prototype),
+           stories = ifelse(is.na(stories), 1, stories),
+           type = case_when(
+             stories == 1 & doe_prototype == 'office' ~ 'single_office',
+             stories > 1 & stories < 10 & doe_prototype == 'office' ~ 'mid_rise_office',
+             stories >= 10 & doe_prototype == 'office' ~ 'high_rise_office',
+             reported_propertysubtype == 'Parking Garage' ~ 'parking_garage',
+             doe_prototype == 'no_match' ~ reported_propertytype,
+             doe_prototype == 'quick_service_restaurant' | doe_prototype == 'full_service_restaurant' ~ 'Retail',
+             TRUE ~ doe_prototype
+           )) %>%
+  mutate(type = str_to_lower(type)) %>%
+  mutate(type = case_when(
+             stories == 1 & (type == 'flex' | type == 'office')  ~ 'single_office',
+             (stories > 1 & stories < 10) & (type == 'flex' | type == 'office') ~ 'mid_rise_office',
+             stories >= 10 & (type == 'flex' | type == 'office') ~ 'high_rise_office',
+             TRUE ~ type))
+  temp$type <- str_replace(temp$type,' & ','_')
+  temp$State <- state.name[match(temp$statecode,state.abb)]
+  temp <- temp %>% 
+    mutate(State = ifelse(statecode=='DC','District of Columbia',State))
+  c_buildings[[i]] <- temp  # << numeric index
+}
+
+c_buildings <- bind_rows(c_buildings) %>%
+  rename('GEOID'='countyid') %>%
+  mutate(GEOID = as.character(GEOID),
+         len = nchar(GEOID),
+         GEOID = ifelse(len == 4,paste0('0',GEOID),GEOID)) %>%
+  left_join(., urban, by = 'GEOID') %>%
+  dplyr::rename(pct_urban = P002_calc_pct0002,
+                pct_rural = P002_calc_pct0003) %>%
+  mutate(Urban_Rural = case_when(pct_urban >= 75 ~ 'Urban',
+                                 pct_urban < 25 ~ 'Rural',
+                                 TRUE ~ 'Mixed'))
+
+```
+
+# Create Final Dataframe
+
+``` {r commercial_cost}
+
+comercial_build_cost <- build_cost %>%
+  select(-starts_with('price')) %>%
+  pivot_longer(cols=c(-Urban_Rural,-State),names_to='type',values_to='build_cost')
+
+c_buildings_summary <- c_buildings %>%
+  left_join(comercial_build_cost,by=c('State','Urban_Rural','type')) %>%
+  mutate(cost = area_total * build_cost) %>%
+  dplyr::arrange(GEOID) %>%
+  group_by(GEOID) %>% dplyr::summarise(commercial_cost=sum(cost))
+
+county_summary <- county_summary %>%
+  left_join(c_buildings_summary,by='GEOID')
+
+final_df <- county_summary %>%
+  select(GEOID,County,State,total,commercial_cost) %>%
+  rename('residential_cost'='total') %>%
+  mutate(commercial_cost = replace_na(commercial_cost,0))
+
+st_write(final_df,'county_summary.gpkg')
+
+```
+
+``` {r national_summary}
+
+national_summary <- final_df %>%
+  st_drop_geometry() %>%
+  dplyr::summarize(commercial = sum(commercial_cost), residential=sum(residential_cost))
+
+```
+
+``` {r state_summary}
+
+state_summary <- final_df %>%
+  st_drop_geometry() %>%
+  group_by(State) %>% dplyr::summarize(commercial = sum(commercial_cost), residential=sum(residential_cost))
+
+states <- states(cb=TRUE) %>%
+  left_join(state_summary,by=join_by(NAME == State)) %>%
+  drop_na()
+
+states %>%
+  st_drop_geometry() %>%
+  write.csv(file='states.csv')
+
+st_write(states,'states_summary.gpkg',append=FALSE)
+
+```
+
+```
