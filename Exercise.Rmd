@@ -14,6 +14,8 @@ library(tigris)
 library(sf)
 library(readxl)
 library(janitor)
+
+options(scipen = 999)
 ```
 
 # R Markdown
@@ -32,7 +34,53 @@ vars_acs <- load_variables("acs5",year=2023)
 
 ``` {r regional_ahs_data}
 
-AHS_data <- read_excel('Data/AHS/AHS_MetroArea_Data.xlsx',sheet='AHS')
+AHS_data <- read_excel('Data/AHS/AHS_MetroArea_Data.xlsx',sheet='AHS') %>%
+    mutate(Category = factor(Category, levels = c('Single_detached','Single_attached','Apartment24',
+         'Apartment59','Apartment1019','Apartment2049','Apartment50plus','Mobile_home')))
+
+my_labels <- c(
+  "Single_detached" = "Single Detached",
+  "Single_attached" = "Single Attached",
+  "Apartment24" = "Apartment 2-4",
+  "Apartment59" = "Apartment 5-9",
+  "Apartment1019" = "Apartment 10-19",
+  "Apartment2049" = "Apartment 20-49",
+  "Apartment50plus" = "Apartment 50+",
+  "Mobile_home" = "Mobile Homes"
+)
+
+color = c('#90C226','#54A021','#E6B91E','#E76618','#C42F1A','#918655','#EB7766','#6F91A0')
+
+housing_labels = c('Single Detached','Single Attached','Apartment 2-4',
+         'Apartment 5-9','Apartment 10-19','Apartment 20-49','Apartment 50+','Mobile Home')
+
+ggplot()+
+  geom_col(data=AHS_data %>% filter(Category != 'Total' & Metro %in% c('New York City')),aes(x=Category,y=Mean_Area,fill=Category))+
+  facet_grid(Metro ~ Central)+
+  scale_fill_manual(values=color,name='Apartment Type',labels=housing_labels)+
+  theme_bw()+
+  theme(axis.text.x=element_blank(), #remove x axis labels
+        axis.ticks.x=element_blank(), #remove x axis ticks
+        )+
+  ylab("Square Fooage (square feet)") +
+  xlab("")
+
+ggsave('images/nyc.png')
+
+
+ggplot()+
+  geom_col(data=AHS_data %>% filter(Category != 'Total' & Metro %in% c('Urban','Rural','Mixed')),aes(x=Category,y=Mean_Area,fill=Category))+
+  facet_wrap(~Metro)+
+  scale_fill_manual(values=color,name='Apartment Type',labels=housing_labels)+
+  theme_bw()+
+  theme(axis.text.x=element_blank(), #remove x axis labels
+        axis.ticks.x=element_blank(), #remove x axis ticks
+        legend.position = "none"
+        )+
+  ylab("Square Fooage (square feet)") +
+  xlab("")
+
+ggsave('images/others.png')
 
 ```
 
@@ -156,7 +204,7 @@ rm(NYC_Counties,Seattle_Counties,Detroit_Counties,Phoenix_Counties,SanFrancisco_
 
 # Get ACS Data for Residential Units by County and Urban Areas
 
-```{r get_census_data, echo=FALSE}
+```{r get_census_data, echo=FALSE, fig.width=10}
 
 vars <- c('B25024_002','B25024_003','B25024_004','B25024_005','B25024_006','B25024_007','B25024_008','B25024_009','B25024_010')
 
@@ -181,12 +229,29 @@ residential <- residential %>%
   select('GEOID','County','State','Single_detached','Single_attached','Apartment24',
          'Apartment59','Apartment1019','Apartment2049','Apartment50plus','Mobile_home')
 
-residential_long_no_geom <- residential %>%
-  st_drop_geometry() %>%
+residential_long <- residential %>%
   pivot_longer(cols=c('Single_detached','Single_attached','Apartment24','Apartment59',
                       'Apartment1019','Apartment2049','Apartment50plus','Mobile_home'),names_to='Category')
 
+residential_long_no_AK_HI <- residential_long %>%
+  filter(!(State %in% c("Alaska", "Hawaii"))) %>%
+  mutate(Category = factor(Category, levels = c('Single_detached','Single_attached','Apartment24',
+         'Apartment59','Apartment1019','Apartment2049','Apartment50plus','Mobile_home')))
+
+residential_long_no_geom <- residential_long %>%
+  st_drop_geometry()
+
+
+ggplot()+
+  geom_sf(data=residential_long_no_AK_HI,aes(fill=value),color=NA)+
+  facet_wrap(~Category,ncol=3,labeller=labeller(Category = my_labels))+
+  scale_fill_viridis_c(trans = "log",breaks=c(10,100,1000,10000,100000,1000000),name='Number of Buildings')+
+  theme_void()
+
+ggsave('images/apartments.png')
+
 ```
+
 ``` {r get_urban}
 
 base_url <- 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_2020_DHC_Total_Population/FeatureServer/2/query'
@@ -207,7 +272,7 @@ urban <- st_read(final_url) %>%
 
 # Cost per sq foot table
 
-``` {r build_cost_table}
+``` {r build_cost_table, fig.width=8, fig.height=6}
 
 build_cost <- read_csv('Data/Build_cost_Data.csv') %>%
   separate_wider_delim(cols=Range,delim=":",names=c('State','Range')) %>%
@@ -235,6 +300,36 @@ build_cost <- read_csv('Data/Build_cost_Data.csv') %>%
          parking_garage = round(70 + (143-70) * percent),
          high_rise_office = round(545 + (827-545) * percent)) %>%
   select(-percent)
+
+ggplot()+
+  geom_col(data=build_cost,aes(y=price_per_sq_ft_single,x=state.abb[match(build_cost$State, state.name)]),fill='#C42F1A',color='NA')+
+  facet_wrap(~Urban_Rural,ncol=1,scales='free')+
+  theme_bw()+
+  xlab('State')+
+  ylab('Price ($)')+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave('images/single_family.png')
+
+ggplot()+
+  geom_col(data=build_cost,aes(y=price_per_sq_ft_Apartment_high,x=state.abb[match(build_cost$State, state.name)]),fill='#C42F1A',color='NA')+
+  facet_wrap(~Urban_Rural,ncol=1,scales='free')+
+  theme_bw()+
+  xlab('State')+
+  ylab('Price ($)')+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave('images/high_rise.png')
+
+ggplot()+
+  geom_col(data=build_cost,aes(y=hotel,x=state.abb[match(build_cost$State, state.name)]),fill='#C42F1A',color='NA')+
+  facet_wrap(~Urban_Rural,ncol=1,scales='free')+
+  theme_bw()+
+  xlab('State')+
+  ylab('Price ($)')+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave('images/hotel.png')
 
 ```
 # Create table for Mean Units in Buildings
@@ -282,11 +377,10 @@ county_summary <- residential_long_no_geom2 %>%
   left_join(residential,by='GEOID') %>%
   st_as_sf()
 
-
 st_write(county_summary,'county_summary.shp',append=FALSE)
 ```
 
-``` {r procees_building_data}
+``` {r procees_building_data, fig.width=10}
 
 files = list.files('Data/Commericial_Building_Inventroy',"*.xlsx")
 
@@ -339,6 +433,35 @@ c_buildings <- bind_rows(c_buildings) %>%
   mutate(Urban_Rural = case_when(pct_urban >= 75 ~ 'Urban',
                                  pct_urban < 25 ~ 'Rural',
                                  TRUE ~ 'Mixed'))
+
+buildings_sum <- c_buildings %>%
+  group_by(GEOID,type) %>% summarize(area_commercial = sum(rentablebuildingarea_mean),
+                                count_commercial = sum(bldg_count)) %>%
+  ungroup() %>%
+  full_join(county_summary %>% select('GEOID','geometry','State'),by='GEOID') %>%
+  filter(!(State %in% c("Alaska", "Hawaii"))) %>%
+  filter(!(type == 'NA')) %>%
+  st_as_sf() %>%
+  mutate(type = str_to_title(str_replace_all(type, "_", " ")))
+
+ggplot()+
+  geom_sf(data=county_summary %>% filter(!(State %in% c("Alaska", "Hawaii"))),color='NA',fill='#f2f2f2')+
+  geom_sf(data=buildings_sum,aes(fill=area_commercial),color=NA)+
+  facet_wrap(~type,ncol=4)+
+  scale_fill_viridis_c(trans = "log",breaks=c(0,1000,10000,100000,1000000,10000000,100000000),name='Total Commercial Area')+
+  theme_void()
+
+ggsave('images/commercial_area.png')
+
+
+ggplot()+
+  geom_sf(data=county_summary %>% filter(!(State %in% c("Alaska", "Hawaii"))),color='NA',fill='#f2f2f2')+
+  geom_sf(data=buildings_sum,aes(fill=count_commercial),color=NA)+
+  facet_wrap(~type,ncol=4)+
+  scale_fill_viridis_c(trans = "log",breaks=c(10,50,250,1000,2500,10000),name='Building Count')+
+  theme_void()
+
+ggsave('images/commercial_count.png')
 
 ```
 
